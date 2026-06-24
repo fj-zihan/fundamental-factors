@@ -18,8 +18,6 @@ import dagster as dg
 import pandas as pd
 
 from .. import config
-
-
 class S3RiskModelIOManager(dg.ConfigurableIOManager):
     """
     Parameters
@@ -53,4 +51,29 @@ class S3RiskModelIOManager(dg.ConfigurableIOManager):
     def load_input(self, context: dg.InputContext) -> pd.DataFrame:
         path = self._path(context)
         context.log.info(f"[{self.lineage}] Reading ← {path}")
+        return pd.read_parquet(path)
+import os
+import pandas as pd
+import dagster as dg
+
+
+class LocalRiskModelIOManager(dg.ConfigurableIOManager):
+    base_path: str = "./data"
+
+    def _path(self, context):
+        dataset = context.asset_key.path[-1]
+        return os.path.join(self.base_path, f"{dataset}.parquet")
+
+    def handle_output(self, context, obj: pd.DataFrame) -> None:
+        if obj is None or obj.empty:
+            context.log.warning("Empty DF — skipping write")
+            return
+
+        path = self._path(context)
+        obj.to_parquet(path, index=False)
+        context.log.info(f"[LOCAL] write → {path}")
+
+    def load_input(self, context) -> pd.DataFrame:
+        path = self._path(context)
+        context.log.info(f"[LOCAL] read ← {path}")
         return pd.read_parquet(path)

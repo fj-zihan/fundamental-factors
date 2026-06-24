@@ -8,24 +8,19 @@ from .assets.short_interest_factor import (
     short_interest_factor_incremental,
 )
 from .data.universe import sp500_universe
-
-from .infra.io_manager import S3RiskModelIOManager
 from .infra.massive import MassiveProvider
-
+from .infra.io_manager import LocalRiskModelIOManager
 
 # -------------------------
 # Resources
 # -------------------------
 resources = {
-    "io_manager": S3RiskModelIOManager(
-        bucket=os.getenv("S3_BUCKET", "risk-models"),
-        lineage="live",
-    ),
+    "io_manager": LocalRiskModelIOManager(),
+    "backfill_io_manager": LocalRiskModelIOManager(),
     "si_provider": MassiveProvider(
         api_key=os.getenv("MASSIVE_API_KEY")
     ),
 }
-
 
 # -------------------------
 # Jobs (execution layer)
