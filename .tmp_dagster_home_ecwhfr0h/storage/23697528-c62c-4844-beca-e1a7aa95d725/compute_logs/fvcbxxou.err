@@ -1,8 +1,0 @@
-[32m2026-06-24 19:01:11 +0800[0m - dagster - [34mDEBUG[0m - __ASSET_JOB - 23697528-c62c-4844-beca-e1a7aa95d725 - 38601 - LOGS_CAPTURED - Capturing logs for process (pid: 38601).
-[32m2026-06-24 19:01:11 +0800[0m - dagster - [34mDEBUG[0m - __ASSET_JOB - 23697528-c62c-4844-beca-e1a7aa95d725 - 38601 - sp500_universe - STEP_START - Started execution of step "sp500_universe".
-[32m2026-06-24 19:01:11 +0800[0m - dagster - [34mINFO[0m - __ASSET_JOB - 23697528-c62c-4844-beca-e1a7aa95d725 - sp500_universe - S&P 500 universe loaded from file: 503 tickers
-[32m2026-06-24 19:01:11 +0800[0m - dagster - [34mDEBUG[0m - __ASSET_JOB - 23697528-c62c-4844-beca-e1a7aa95d725 - 38601 - sp500_universe - STEP_OUTPUT - Yielded output "result" of type "DataFrame". (Type check passed).
-[32m2026-06-24 19:01:11 +0800[0m - dagster - [34mINFO[0m - __ASSET_JOB - 23697528-c62c-4844-beca-e1a7aa95d725 - sp500_universe - [LOCAL] write → ./data/sp500_universe.parquet
-[32m2026-06-24 19:01:11 +0800[0m - dagster - [34mDEBUG[0m - __ASSET_JOB - 23697528-c62c-4844-beca-e1a7aa95d725 - 38601 - sp500_universe - ASSET_MATERIALIZATION - Materialized value sp500_universe.
-[32m2026-06-24 19:01:11 +0800[0m - dagster - [34mDEBUG[0m - __ASSET_JOB - 23697528-c62c-4844-beca-e1a7aa95d725 - 38601 - sp500_universe - HANDLED_OUTPUT - Handled output "result" using IO manager "io_manager"
-[32m2026-06-24 19:01:11 +0800[0m - dagster - [34mDEBUG[0m - __ASSET_JOB - 23697528-c62c-4844-beca-e1a7aa95d725 - 38601 - sp500_universe - STEP_SUCCESS - Finished execution of step "sp500_universe" in 81ms.
