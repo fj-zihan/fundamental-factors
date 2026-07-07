@@ -1,9 +1,9 @@
 # Fundamental Factors
 This repository contains Dagster-based implementations and specifications for US fundamental equity factors.
-
 The current implemented factor is the Short Interest Factor. The next factor under spec review is the Institutional Ownership / Crowding Factor.
 
 See `specs/institutional_ownership_crowding_factor_spec.md` for the institutional ownership factor specification.
+
 ------------------------------------------------------------------------
 
 ## Pipeline
