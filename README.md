@@ -1,7 +1,9 @@
-# Short Interest Factor Pipeline
+# Fundamental Factors
+This repository contains Dagster-based implementations and specifications for US fundamental equity factors.
 
-This repository implements a cross-sectional factor pipeline using Dagster for orchestration and S3 for data storage. The system processes S&P 500 constituents to generate a short interest-based cross-sectional signal.
+The current implemented factor is the Short Interest Factor. The next factor under spec review is the Institutional Ownership / Crowding Factor.
 
+See `specs/institutional_ownership_crowding_factor_spec.md` for the institutional ownership factor specification.
 ------------------------------------------------------------------------
 
 ## Pipeline
