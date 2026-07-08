@@ -15,6 +15,14 @@ short_interest_raw          ← Massive API (FINRA short interest)
       ↓
 short_interest_factor_full        → S3 lineage=backfill
 short_interest_factor_incremental → S3 lineage=live
+
+sp500_universe
+      ↓
+institutional_ownership_raw        ← Massive API (13F filings)
+      ↓
+institutional_holdings_normalized
+      ↓
+institutional_ownership_factor     ← float market cap provider
 ```
 
 The pipeline supports: - Full backfill computation across all historical settlement dates - Incremental updates for the latest settlement date
@@ -44,6 +52,11 @@ risk_models/
       validation.py  # pure pandas metric functions (coverage, NaN, standardization, ...)
       checks.py      # Tier 2/3 Dagster asset checks, built on validation.py
       config.py      # configuration parameters, incl. all Tier 1/2/3 thresholds
+      definitions.py # Dagster definitions
+    institutional_ownership/
+      assets/        # Dagster assets for raw 13F, normalized holdings, and MVP factors
+      infra/         # Massive 13F and float data providers
+      config.py      # institutional ownership configuration
       definitions.py # Dagster definitions
 scripts/
   build_universe.py  # one-time script to generate universe CSV
@@ -146,6 +159,7 @@ Create a `.env` file in the project root:
 
 ```         
 MASSIVE_API_KEY=your_massive_api_key
+FLOAT_DATA_PATH=data/static/float_data.csv
 
 # LocalStack (local S3 emulation)
 LOCALSTACK_ENDPOINT=http://localhost:4566
@@ -155,6 +169,12 @@ AWS_DEFAULT_REGION=us-east-1
 ```
 
 For production, remove `LOCALSTACK_ENDPOINT` and configure real AWS credentials via `~/.aws/credentials`.
+
+The institutional ownership MVP requires point-in-time float data for
+`io_level`. The default static provider expects `FLOAT_DATA_PATH` to point to a
+CSV with `ticker`, `period`, and `float_market_cap` columns. Alternatively,
+provide `float_shares` and `price`, and the provider will compute
+`float_market_cap`.
 
 ### 5. Start LocalStack and create S3 bucket
 
@@ -180,6 +200,12 @@ awslocal s3 mb s3://risk-models
 dagster dev -m risk_models.us_fundamental.short_interest
 ```
 
+For the institutional ownership MVP:
+
+``` bash
+dagster dev -m risk_models.us_fundamental.institutional_ownership
+```
+
 ### Run incremental job
 
 ``` bash
@@ -192,6 +218,13 @@ dagster job execute -m risk_models.us_fundamental.short_interest \
 ``` bash
 dagster job execute -m risk_models.us_fundamental.short_interest \
   -j short_interest_full_backfill_job
+```
+
+### Run institutional ownership MVP job
+
+``` bash
+dagster job execute -m risk_models.us_fundamental.institutional_ownership \
+  -j institutional_ownership_mvp_job
 ```
 
 ### Run tests
