@@ -15,7 +15,7 @@ The first production target should be a robust stock-level cross-sectional signa
 
 The central design principle is point-in-time conservatism: 13F data should be treated as slow, public, long-only institutional positioning data. It is useful for ownership, sponsorship, breadth, and crowding risk, but it is not real-time order flow.
 
-This spec describes the full design space for institutional ownership and crowding factors using 13F filings. For the MVP, the proposed implementation should cover the raw ingestion layer, normalized holdings layer, and two robust factor outputs: `io_level` and `io_breadth`. The change, flow, and concentration factors are included as extensions once security mapping, shares outstanding, split adjustment, and amendment handling are confirmed.
+This spec describes the full design space for institutional ownership and crowding factors using 13F filings. For the MVP, the proposed implementation should cover the raw ingestion layer, normalized holdings layer, float data join, and two robust factor outputs: `io_level` and `io_breadth`. The change, flow, and concentration factors are included as extensions once security mapping, float data, split adjustment, and amendment handling are confirmed.
 
 ## 2. Background and Constraints
 
@@ -41,14 +41,15 @@ Definition:
 
 ``` text
 io_value_i,t = sum_f market_value_f,i,t
-io_level_raw_i,t = log1p(io_value_i,t)
+float_market_cap_i,t = float_shares_i,t * price_i,t
+io_level_raw_i,t = io_value_i,t / float_market_cap_i,t
 io_level_i,t = zscore_by_period(winsorize(io_level_raw_i,t))
 ```
 
-Preferred variant when shares outstanding is available:
+Share-based equivalent when reported shares and float shares are reliable:
 
 ``` text
-io_pct_i,t = total_13f_common_shares_i,t / split_adjusted_shares_outstanding_i,t
+io_pct_i,t = total_13f_common_shares_i,t / float_shares_i,t
 io_pct_factor_i,t = zscore_by_period(winsorize(io_pct_i,t))
 ```
 
@@ -74,18 +75,20 @@ higher = more institutionally owned
 Implementation notes:
 
 -   Aggregate by `(period, security_id)` after mapping CUSIP to ticker/security id.
--   Use `market_value` as the preferred level input.
--   Consider optional scale normalization by free-float market capitalization when that data is available:
+-   Use float, not total shares outstanding, as the denominator for ownership calculations.
+-   Use `market_value / float_market_cap` as the preferred MVP level input if float market cap is available.
+-   Use `total_13f_common_shares / float_shares` as the share-based ownership input when shares and split adjustments are reliable.
+-   If the data vendor provides `market_cap`, confirm whether it is total-shares-based or float-based before using it. Do not assume that market cap is float-adjusted.
 
 ``` text
 io_pct_float_i,t = total_13f_shares_i,t / float_shares_i,t
 ```
 
-Until shares outstanding or float shares are available, do not call this "ownership percentage"; call it "13F reported ownership value".
+Until float shares or float market capitalization are available, do not call this "ownership percentage"; call it "13F reported ownership value".
 
 ### 3.2 IO_CHANGE: Change in Institutional Ownership
 
-MVP priority: phase 2, after shares outstanding or market-cap scaling is available.
+MVP priority: phase 2, after float shares or float-market-cap scaling is available.
 
 Definition:
 
@@ -94,11 +97,11 @@ dio_pct_i,t = io_pct_i,t - io_pct_i,t-1
 dio_factor_i,t = zscore_by_period(winsorize(dio_pct_i,t))
 ```
 
-Fallback when shares outstanding is unavailable:
+Fallback when share-based deltas are unavailable:
 
 ``` text
 dio_value_scaled_i,t =
-  (total_13f_market_value_i,t - total_13f_market_value_i,t-1) / market_cap_i,t-1
+  (total_13f_market_value_i,t - total_13f_market_value_i,t-1) / float_market_cap_i,t-1
 ```
 
 Interpretation:
@@ -358,6 +361,7 @@ Purpose:
 -   Filter to common-equity-like holdings.
 -   Resolve amendments.
 -   Map CUSIP/FIGI/issuer to internal security id and ticker.
+-   Join point-in-time float shares and/or float market capitalization.
 -   Deduplicate manager/security/period records.
 -   Convert numeric columns to consistent units.
 
@@ -373,6 +377,8 @@ cusip
 issuer_name
 market_value
 shares
+float_shares
+float_market_cap
 source_accession_number
 is_amended
 is_option
@@ -412,6 +418,8 @@ holder_count
 active_filer_count
 total_13f_market_value
 total_13f_shares
+float_market_cap
+float_shares
 buyer_count
 seller_count
 active_count
@@ -524,7 +532,7 @@ Risks:
 
 ### 6.4 Share Adjustments
 
-For ownership level based on current reported `market_value`, no split adjustment is required before cross-sectional standardization.
+For ownership level based on current reported `market_value`, the denominator should be point-in-time `float_market_cap`, not total-shares-based market capitalization.
 
 For flow based on `delta_shares`, split adjustments are required:
 
@@ -584,7 +592,8 @@ flow metrics = 0 or null depending on prior availability
 
 Recommended:
 
--   For level and breadth, use zero before `log1p`.
+-   For `io_level`, use zero reported 13F value over the stock's point-in-time float market cap.
+-   For `io_breadth`, use zero holders before `log1p`.
 -   For flow, require both current and previous period to compute manager-level deltas. If prior data is missing, set flow metric to null and exclude from flow z-score.
 
 ### 7.3 Sector or Size Neutralization
@@ -604,7 +613,7 @@ io_flow_sector_neutral
 
 Rationale:
 
-Institutional ownership is mechanically related to market cap, index membership, liquidity, and sector. Raw values are useful as descriptors, but alpha research should control for size and sector.
+Institutional ownership is mechanically related to float market cap, total market cap, index membership, liquidity, and sector. Raw values are useful as descriptors, but alpha research should control for size and sector.
 
 ## 8. Validation and Asset Checks
 
@@ -652,6 +661,8 @@ Minimum acceptable backtest rules:
 -   Signal date must be after public filing date, not quarter end.
 -   Use point-in-time universe membership when available.
 -   Use point-in-time CUSIP-to-ticker mapping when available.
+-   Use point-in-time float shares or float market capitalization for ownership calculations.
+-   Do not substitute total shares outstanding for float in ownership denominators.
 -   Do not include amended/confidential holdings before they became public.
 -   Test with realistic quarterly rebalance cadence.
 -   Compare raw, size-neutral, and sector-neutral versions.
@@ -677,7 +688,7 @@ sector-neutral rank IC
 Recommended diagnostics:
 
 ``` text
-correlation with market cap
+correlation with float market cap and total market cap
 correlation with dollar volume
 correlation with index membership
 correlation with short interest factor
@@ -729,8 +740,9 @@ Build in this order:
 
 1.  `institutional_ownership_raw`
 2.  `institutional_holdings_normalized`
-3.  `io_level`
-4.  `io_breadth`
+3.  Join point-in-time float shares and/or float market capitalization
+4.  `io_level`
+5.  `io_breadth`
 
 MVP output:
 
@@ -743,6 +755,7 @@ io_breadth
 holder_count
 active_filer_count
 total_13f_market_value
+float_market_cap
 ```
 
 Phase 2:
@@ -754,5 +767,5 @@ Phase 2:
 Future extensions:
 
 1.  `io_crowding_flow` using count-based buyer/seller imbalance
-2.  Split-adjusted share/value flow after security master support exists
+2.  Split-adjusted share/value flow after float data and security master support exist
 3.  Size, sector, and liquidity neutralized variants
