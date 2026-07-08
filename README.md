@@ -34,10 +34,13 @@ All assets have been verified end-to-end locally using Massive API and LocalStac
 ```         
 risk_models/
   us_fundamental/
+    shared/
+      data/         # shared universe asset definitions
+      infra/        # shared IO managers and infrastructure
+      config.py     # shared infrastructure configuration
     short_interest/
       assets/        # Dagster asset definitions (raw + factor)
-      infra/         # IO manager (S3) + Massive API provider
-      data/          # universe asset definition
+      infra/         # Massive API provider
       validation.py  # pure pandas metric functions (coverage, NaN, standardization, ...)
       checks.py      # Tier 2/3 Dagster asset checks, built on validation.py
       config.py      # configuration parameters, incl. all Tier 1/2/3 thresholds

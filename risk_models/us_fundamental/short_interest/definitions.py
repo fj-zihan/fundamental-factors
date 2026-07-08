@@ -10,9 +10,9 @@ from .assets.short_interest_factor import (
     short_interest_factor_incremental,
 )
 from .checks import all_checks
-from .data.universe import sp500_universe
 from .infra.massive import MassiveProvider
-from .infra.io_manager import S3RiskModelIOManager
+from risk_models.us_fundamental.shared.data.universe import sp500_universe
+from risk_models.us_fundamental.shared.infra.io_manager import S3RiskModelIOManager
 
 # -------------------------
 # Resources
