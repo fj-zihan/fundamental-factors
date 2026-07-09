@@ -15,7 +15,9 @@ The first production target should be a robust stock-level cross-sectional signa
 
 The central design principle is point-in-time conservatism: 13F data should be treated as slow, public, long-only institutional positioning data. It is useful for ownership, sponsorship, breadth, and crowding risk, but it is not real-time order flow.
 
-This spec describes the full design space for institutional ownership and crowding factors using 13F filings. For the MVP, the proposed implementation should cover the raw ingestion layer, normalized holdings layer, float data join, and two robust factor outputs: `io_level` and `io_breadth`. The change, flow, and concentration factors are included as extensions once security mapping, float data, split adjustment, and amendment handling are confirmed.
+This spec describes the full design space for institutional ownership and crowding factors using 13F filings. For the MVP, the proposed implementation should cover the raw ingestion layer, normalized holdings layer, market-cap denominator join, and two robust factor outputs: `io_level` and `io_breadth`. The change, flow, and concentration factors are included as extensions once security mapping, point-in-time float data, split adjustment, and amendment handling are confirmed.
+
+MVP denominator decision: use market cap as the ownership-level denominator to support a real historical panel. Massive's latest free-float endpoint does not provide point-in-time historical float, and using latest float for past quarters would create a misleading historical series. Market cap is an imperfect denominator because it includes non-tradable/strategic holdings, but for the MVP we prioritize producing a real three-year history. TODO: switch the denominator provider to point-in-time float market cap when historical float data becomes available.
 
 ## 2. Background and Constraints
 
@@ -41,12 +43,12 @@ Definition:
 
 ``` text
 io_value_i,t = sum_f market_value_f,i,t
-float_market_cap_i,t = float_shares_i,t * price_i,t
-io_level_raw_i,t = io_value_i,t / float_market_cap_i,t
+market_cap_i,t = point-in-time market capitalization at 13F period end
+io_level_raw_i,t = io_value_i,t / market_cap_i,t
 io_level_i,t = zscore_by_period(winsorize(io_level_raw_i,t))
 ```
 
-Share-based equivalent when reported shares and float shares are reliable:
+Preferred future share-based equivalent when reported shares and point-in-time float shares are reliable:
 
 ``` text
 io_pct_i,t = total_13f_common_shares_i,t / float_shares_i,t
@@ -75,20 +77,20 @@ higher = more institutionally owned
 Implementation notes:
 
 -   Aggregate by `(period, security_id)` after mapping CUSIP to ticker/security id.
--   Use float, not total shares outstanding, as the denominator for ownership calculations.
--   Use `market_value / float_market_cap` as the preferred MVP level input if float market cap is available.
--   Use `total_13f_common_shares / float_shares` as the share-based ownership input when shares and split adjustments are reliable.
--   If the data vendor provides `market_cap`, confirm whether it is total-shares-based or float-based before using it. Do not assume that market cap is float-adjusted.
+-   MVP uses `market_value / market_cap` to support a real historical panel.
+-   This should not be labeled as a strict ownership percentage because market cap is not float-adjusted.
+-   The provider should expose a generic denominator contract so the market-cap denominator can be replaced later without changing factor logic.
+-   TODO: replace market cap with point-in-time float market cap when historical float data is available.
 
 ``` text
-io_pct_float_i,t = total_13f_shares_i,t / float_shares_i,t
+future_io_pct_float_i,t = total_13f_shares_i,t / float_shares_i,t
 ```
 
-Until float shares or float market capitalization are available, do not call this "ownership percentage"; call it "13F reported ownership value".
+Until point-in-time float shares or float market capitalization are available, do not call the MVP level signal "ownership percentage"; call it "13F reported ownership value scaled by market cap".
 
 ### 3.2 IO_CHANGE: Change in Institutional Ownership
 
-MVP priority: phase 2, after float shares or float-market-cap scaling is available.
+MVP priority: phase 2, after at least two clean quarterly normalized holdings snapshots exist.
 
 Definition:
 
@@ -101,7 +103,7 @@ Fallback when share-based deltas are unavailable:
 
 ``` text
 dio_value_scaled_i,t =
-  (total_13f_market_value_i,t - total_13f_market_value_i,t-1) / float_market_cap_i,t-1
+  (total_13f_market_value_i,t - total_13f_market_value_i,t-1) / market_cap_i,t-1
 ```
 
 Interpretation:
@@ -361,7 +363,7 @@ Purpose:
 -   Filter to common-equity-like holdings.
 -   Resolve amendments.
 -   Map CUSIP/FIGI/issuer to internal security id and ticker.
--   Join point-in-time float shares and/or float market capitalization.
+-   Join market-cap denominator for MVP historical coverage.
 -   Deduplicate manager/security/period records.
 -   Convert numeric columns to consistent units.
 
@@ -377,13 +379,16 @@ cusip
 issuer_name
 market_value
 shares
-float_shares
-float_market_cap
+denominator_value
+denominator_type
+market_cap
 source_accession_number
 is_amended
 is_option
 is_common_equity
 ```
+
+TODO: add point-in-time `float_shares` and `float_market_cap` columns when a historical float source is available.
 
 ### 4.3 Factor Asset
 
@@ -418,8 +423,9 @@ holder_count
 active_filer_count
 total_13f_market_value
 total_13f_shares
-float_market_cap
-float_shares
+denominator_value
+denominator_type
+market_cap
 buyer_count
 seller_count
 active_count
@@ -532,7 +538,7 @@ Risks:
 
 ### 6.4 Share Adjustments
 
-For ownership level based on current reported `market_value`, the denominator should be point-in-time `float_market_cap`, not total-shares-based market capitalization.
+For the MVP ownership level based on reported `market_value`, the denominator is point-in-time `market_cap` so the factor can support a real historical panel. This is a deliberate compromise and should remain documented. TODO: replace this denominator with point-in-time `float_market_cap` when historical float data is available.
 
 For flow based on `delta_shares`, split adjustments are required:
 
@@ -592,7 +598,7 @@ flow metrics = 0 or null depending on prior availability
 
 Recommended:
 
--   For `io_level`, use zero reported 13F value over the stock's point-in-time float market cap.
+-   For `io_level`, use zero reported 13F value over the stock's point-in-time market cap in the MVP.
 -   For `io_breadth`, use zero holders before `log1p`.
 -   For flow, require both current and previous period to compute manager-level deltas. If prior data is missing, set flow metric to null and exclude from flow z-score.
 
@@ -661,8 +667,9 @@ Minimum acceptable backtest rules:
 -   Signal date must be after public filing date, not quarter end.
 -   Use point-in-time universe membership when available.
 -   Use point-in-time CUSIP-to-ticker mapping when available.
--   Use point-in-time float shares or float market capitalization for ownership calculations.
--   Do not substitute total shares outstanding for float in ownership denominators.
+-   Use point-in-time market cap for the MVP denominator to support a real historical panel.
+-   Document that market cap is not float-adjusted and can understate ownership intensity for low-float companies.
+-   TODO: switch to point-in-time float shares or float market capitalization when historical float data is available.
 -   Do not include amended/confidential holdings before they became public.
 -   Test with realistic quarterly rebalance cadence.
 -   Compare raw, size-neutral, and sector-neutral versions.
@@ -740,7 +747,7 @@ Build in this order:
 
 1.  `institutional_ownership_raw`
 2.  `institutional_holdings_normalized`
-3.  Join point-in-time float shares and/or float market capitalization
+3.  Join point-in-time market cap denominator
 4.  `io_level`
 5.  `io_breadth`
 
@@ -755,8 +762,12 @@ io_breadth
 holder_count
 active_filer_count
 total_13f_market_value
-float_market_cap
+denominator_value
+denominator_type
+market_cap
 ```
+
+MVP limitation: the denominator is market cap, not point-in-time float market cap. This supports a real three-year history but can understate ownership intensity for low-float companies. TODO: switch the denominator provider to point-in-time float market cap when historical float data becomes available.
 
 Phase 2:
 

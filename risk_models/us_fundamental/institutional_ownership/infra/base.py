@@ -20,11 +20,11 @@ class InstitutionalHoldingsProvider(ABC):
     ) -> pd.DataFrame: ...
 
 
-class FloatDataProvider(ABC):
-    """Interface for fetching point-in-time float denominators."""
+class DenominatorDataProvider(ABC):
+    """Interface for fetching ownership denominator data."""
 
     @abstractmethod
-    def fetch_float_data(
+    def fetch_denominator_data(
         self,
         tickers: list[str],
         periods: list[pd.Timestamp],

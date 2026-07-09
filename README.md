@@ -1,8 +1,18 @@
-# Fundamental Factors
-This repository contains Dagster-based implementations and specifications for US fundamental equity factors.
-The current implemented factor is the Short Interest Factor. The next factor under spec review is the Institutional Ownership / Crowding Factor.
+---
+editor_options: 
+  markdown: 
+    wrap: 72
+---
 
-See `specs/institutional_ownership_crowding_factor_spec.md` for the institutional ownership factor specification.
+# Fundamental Factors
+
+This repository contains Dagster-based implementations and
+specifications for US fundamental equity factors. The current
+implemented factor is the Short Interest Factor. The next factor under
+spec review is the Institutional Ownership / Crowding Factor.
+
+See `specs/institutional_ownership_crowding_factor_spec.md` for the
+institutional ownership factor specification.
 
 ------------------------------------------------------------------------
 
@@ -22,18 +32,20 @@ institutional_ownership_raw        ← Massive API (13F filings)
       ↓
 institutional_holdings_normalized
       ↓
-institutional_ownership_factor     ← float market cap provider
+institutional_ownership_factor     ← market cap denominator provider
 ```
 
-The pipeline supports: - Full backfill computation across all historical settlement dates - Incremental updates for the latest settlement date
+The pipeline supports: - Full backfill computation across all historical
+settlement dates - Incremental updates for the latest settlement date
 
 ------------------------------------------------------------------------
 
 ## Materialization Status
 
-All assets have been verified end-to-end locally using Massive API and LocalStack (S3 emulation).
+All assets have been verified end-to-end locally using Massive API and
+LocalStack (S3 emulation).
 
-<img width="987" height="291" alt="截屏2026-07-01 19 02 08" src="https://github.com/user-attachments/assets/8beaa457-7a77-4185-a214-6925a2811ded" />
+<img src="https://github.com/user-attachments/assets/8beaa457-7a77-4185-a214-6925a2811ded" alt="截屏2026-07-01 19 02 08" width="987" height="291"/>
 
 ------------------------------------------------------------------------
 
@@ -55,7 +67,7 @@ risk_models/
       definitions.py # Dagster definitions
     institutional_ownership/
       assets/        # Dagster assets for raw 13F, normalized holdings, and MVP factors
-      infra/         # Massive 13F and float data providers
+      infra/         # Massive 13F and denominator data providers
       config.py      # institutional ownership configuration
       definitions.py # Dagster definitions
 scripts/
@@ -75,7 +87,8 @@ requirements.txt
 
 -   Uses S&P 500 constituents as the current universe
 -   Implemented as a Dagster asset (`sp500_universe`)
--   Reads from `data/static/SP500_universe.csv`, generated once via `scripts/build_universe.py`
+-   Reads from `data/static/SP500_universe.csv`, generated once via
+    `scripts/build_universe.py`
 -   Planned upgrade: point-in-time universe
 
 ### 2. Raw Data Asset
@@ -88,21 +101,29 @@ requirements.txt
 
 ### 3. Factor Assets
 
-**Asset:** `short_interest_factor_full` - Cross-sectional winsorized z-score of `days_to_cover`, computed independently per settlement date across all historical dates - Written to S3 `lineage=backfill` with versioned build path
+**Asset:** `short_interest_factor_full` - Cross-sectional winsorized
+z-score of `days_to_cover`, computed independently per settlement date
+across all historical dates - Written to S3 `lineage=backfill` with
+versioned build path
 
-**Asset:** `short_interest_factor_incremental` - Same computation, latest settlement date only, for live incremental updates - Written to S3 `lineage=live`
+**Asset:** `short_interest_factor_incremental` - Same computation,
+latest settlement date only, for live incremental updates - Written to
+S3 `lineage=live`
 
 ### 4. Asset Validation
 
-Three-tier validation system in `validation.py` (pure metric functions) + `checks.py` (Dagster wiring):
+Three-tier validation system in `validation.py` (pure metric
+functions) + `checks.py` (Dagster wiring):
 
-| Tier   | Mechanism                                             | Where                                              | Trigger                                                                 |
-|--------|--------------------------------------------------------|-----------------------------------------------------|--------------------------------------------------------------------------|
-| Tier 1 | Inline `raise dg.Failure(...)`, before the asset returns (not a `@dg.asset_check` — those only run *after* materialization) | `short_interest_raw` (defensive copy also in the two factor assets) | Universe coverage < 50% of `sp500_universe`; > 50% NaN in required columns |
-| Tier 2 | `@dg.asset_check(..., blocking=True)`, severity ERROR  | `short_interest_raw`, `short_interest_factor_full`, `short_interest_factor_incremental` | Schema violations; duplicate `(ticker, settlement_date)`; NaN > 5%; `si_factor` mean/std deviation above the T2 band |
-| Tier 3 | `@dg.asset_check(..., blocking=False)`, severity WARN  | same three assets                                  | NaN > 1%; `si_factor` mean/std deviation above the T3 band; `inf` values; exposure instability (`\|Δ si_factor\|` between the two most recent settlement dates, diagnostic only) |
+| Tier   | Mechanism                                                                                                                   | Where                                                                                   | Trigger                                                                                                                                                                           |
+|---------------|------------------|-----------------|------------------------|
+| Tier 1 | Inline `raise dg.Failure(...)`, before the asset returns (not a `@dg.asset_check` — those only run *after* materialization) | `short_interest_raw` (defensive copy also in the two factor assets)                     | Universe coverage \< 50% of `sp500_universe`; \> 50% NaN in required columns                                                                                                      |
+| Tier 2 | `@dg.asset_check(..., blocking=True)`, severity ERROR                                                                       | `short_interest_raw`, `short_interest_factor_full`, `short_interest_factor_incremental` | Schema violations; duplicate `(ticker, settlement_date)`; NaN \> 5%; `si_factor` mean/std deviation above the T2 band                                                             |
+| Tier 3 | `@dg.asset_check(..., blocking=False)`, severity WARN                                                                       | same three assets                                                                       | NaN \> 1%; `si_factor` mean/std deviation above the T3 band; `inf` values; exposure instability (`\|Δ si_factor\|` between the two most recent settlement dates, diagnostic only) |
 
-All thresholds live in `config.py`. `blocking=True/False` is what actually gates downstream execution — `severity` is UI classification only.
+All thresholds live in `config.py`. `blocking=True/False` is what
+actually gates downstream execution — `severity` is UI classification
+only.
 
 ### 5. Infrastructure Layer
 
@@ -118,7 +139,8 @@ s3://{bucket}/
       lineage=backfill/build={run_id}/data.parquet
 ```
 
-Supports LocalStack via `LOCALSTACK_ENDPOINT` environment variable for local development.
+Supports LocalStack via `LOCALSTACK_ENDPOINT` environment variable for
+local development.
 
 #### Data Provider (`MassiveProvider`)
 
@@ -151,7 +173,9 @@ pip install -r requirements.txt
 python3 scripts/build_universe.py
 ```
 
-Fetches the current S&P 500 constituent list from Wikipedia and writes it to `data/static/SP500_universe.csv`. Run once before materializing the pipeline.
+Fetches the current S&P 500 constituent list from Wikipedia and writes
+it to `data/static/SP500_universe.csv`. Run once before materializing
+the pipeline.
 
 ### 4. Configure environment variables
 
@@ -159,7 +183,7 @@ Create a `.env` file in the project root:
 
 ```         
 MASSIVE_API_KEY=your_massive_api_key
-FLOAT_DATA_PATH=data/static/float_data.csv
+DENOMINATOR_DATA_PATH=data/static/denominator_data.csv
 
 # LocalStack (local S3 emulation)
 LOCALSTACK_ENDPOINT=http://localhost:4566
@@ -168,13 +192,19 @@ AWS_SECRET_ACCESS_KEY=test
 AWS_DEFAULT_REGION=us-east-1
 ```
 
-For production, remove `LOCALSTACK_ENDPOINT` and configure real AWS credentials via `~/.aws/credentials`.
+For production, remove `LOCALSTACK_ENDPOINT` and configure real AWS
+credentials via `~/.aws/credentials`.
 
-The institutional ownership MVP requires point-in-time float data for
-`io_level`. The default static provider expects `FLOAT_DATA_PATH` to point to a
-CSV with `ticker`, `period`, and `float_market_cap` columns. Alternatively,
-provide `float_shares` and `price`, and the provider will compute
-`float_market_cap`.
+The institutional ownership MVP uses market cap as the `io_level`
+denominator so it can produce a real historical panel. This is an
+intentional MVP compromise: market cap is less theoretically precise
+than point-in-time float market cap because it includes
+non-tradable/strategic holdings.
+
+TODO: switch the denominator provider to point-in-time float market cap
+when a historical float source becomes available. The default static
+denominator fallback expects `DENOMINATOR_DATA_PATH` to point to a CSV
+with `ticker`, `period`, and `market_cap` columns.
 
 ### 5. Start LocalStack and create S3 bucket
 
@@ -203,7 +233,7 @@ dagster dev -m risk_models.us_fundamental.short_interest
 For the institutional ownership MVP:
 
 ``` bash
-dagster dev -m risk_models.us_fundamental.institutional_ownership
+dagster dev -m risk_models.us_fundamental.institutional_ownership.definitions
 ```
 
 ### Run incremental job
@@ -223,7 +253,7 @@ dagster job execute -m risk_models.us_fundamental.short_interest \
 ### Run institutional ownership MVP job
 
 ``` bash
-dagster job execute -m risk_models.us_fundamental.institutional_ownership \
+dagster job execute -m risk_models.us_fundamental.institutional_ownership.definitions \
   -j institutional_ownership_mvp_job
 ```
 
@@ -233,7 +263,8 @@ dagster job execute -m risk_models.us_fundamental.institutional_ownership \
 pytest tests/
 ```
 
-External dependencies (Massive API, S3) are mocked in tests — no credentials required.
+External dependencies (Massive API, S3) are mocked in tests — no
+credentials required.
 
 ------------------------------------------------------------------------
 
@@ -243,7 +274,8 @@ External dependencies (Massive API, S3) are mocked in tests — no credentials r
 -   Deterministic cross-sectional factor generation (winsorized z-score)
 -   Support for full backfill and incremental live workflows
 -   S3 as persistent storage with lineage-aware path structure
--   Modular provider abstraction — swap data vendors without touching asset logic
+-   Modular provider abstraction — swap data vendors without touching
+    asset logic
 -   Three-tier asset validation for early failure detection
 
 ------------------------------------------------------------------------
@@ -259,6 +291,7 @@ External dependencies (Massive API, S3) are mocked in tests — no credentials r
 ## Future Work
 
 -   Point-in-time universe construction
--   Additional fundamental signals (analyst revisions, ownership factors)
+-   Additional fundamental signals (analyst revisions, ownership
+    factors)
 -   Multi-factor portfolio layer
 -   Dagster scheduling via sensors

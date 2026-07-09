@@ -7,18 +7,20 @@ from risk_models.us_fundamental.institutional_ownership.assets.institutional_hol
 from risk_models.us_fundamental.institutional_ownership.assets.institutional_ownership_factor import (
     institutional_ownership_factor,
 )
-from risk_models.us_fundamental.institutional_ownership.infra.float_data import (
-    MassiveFloatDataProvider,
+from risk_models.us_fundamental.institutional_ownership.infra.denominator_data import (
+    MassiveMarketCapDataProvider,
 )
 
 
-class _FloatProvider:
-    def fetch_float_data(self, tickers, periods):
+class _DenominatorProvider:
+    def fetch_denominator_data(self, tickers, periods):
         return pd.DataFrame(
             {
                 "ticker": ["AMZN", "MSFT", "NVDA"],
                 "period": pd.to_datetime(["2024-09-30", "2024-09-30", "2024-09-30"]),
-                "float_market_cap": [1000.0, 500.0, 250.0],
+                "denominator_value": [1000.0, 500.0, 250.0],
+                "denominator_type": ["market_cap", "market_cap", "market_cap"],
+                "market_cap": [1000.0, 500.0, 250.0],
             }
         )
 
@@ -36,27 +38,13 @@ class _FakeResponse:
 
 class _FakeSession:
     def get(self, url, headers=None, params=None, timeout=None):
-        if url.endswith("/stocks/vX/float"):
-            return _FakeResponse(
-                {
-                    "results": [
-                        {
-                            "ticker": params["ticker"],
-                            "free_float": 100.0,
-                            "effective_date": "2026-07-01",
-                        }
-                    ]
-                }
-            )
-
         return _FakeResponse(
             {
-                "results": [
-                    {
-                        "c": 25.0,
-                        "t": 1711929600000,
-                    }
-                ]
+                "results": {
+                    "ticker": url.rsplit("/", 1)[-1],
+                    "market_cap": 2500.0,
+                    "as_of_date": params["date"],
+                }
             }
         )
 
@@ -151,7 +139,7 @@ def test_normalized_filters_options_and_maps_tickers():
     }
 
 
-def test_factor_uses_float_market_cap_denominator():
+def test_factor_uses_market_cap_denominator():
     normalized = institutional_holdings_normalized(
         build_asset_context(),
         _raw_13f(),
@@ -160,29 +148,31 @@ def test_factor_uses_float_market_cap_denominator():
     result = institutional_ownership_factor(
         build_asset_context(),
         normalized,
-        _FloatProvider(),
+        _DenominatorProvider(),
     )
 
     amzn = result[result["ticker"] == "AMZN"].iloc[0]
     msft = result[result["ticker"] == "MSFT"].iloc[0]
 
     assert amzn["total_13f_market_value"] == 300.0
-    assert amzn["float_market_cap"] == 1000.0
+    assert amzn["denominator_type"] == "market_cap"
+    assert amzn["denominator_value"] == 1000.0
+    assert amzn["market_cap"] == 1000.0
     assert msft["total_13f_market_value"] == 150.0
-    assert msft["float_market_cap"] == 500.0
+    assert msft["denominator_value"] == 500.0
     assert {"io_level", "io_breadth"}.issubset(result.columns)
 
 
-def test_massive_float_provider_builds_float_market_cap():
-    provider = MassiveFloatDataProvider(api_key="test", session=_FakeSession())
+def test_massive_market_cap_provider_builds_denominator():
+    provider = MassiveMarketCapDataProvider(api_key="test", session=_FakeSession())
 
-    result = provider.fetch_float_data(
+    result = provider.fetch_denominator_data(
         tickers=["AMZN"],
         periods=[pd.Timestamp("2024-03-31")],
     )
 
     row = result.iloc[0]
     assert row["ticker"] == "AMZN"
-    assert row["free_float"] == 100.0
-    assert row["close_price"] == 25.0
-    assert row["float_market_cap"] == 2500.0
+    assert row["denominator_type"] == "market_cap"
+    assert row["denominator_value"] == 2500.0
+    assert row["market_cap"] == 2500.0

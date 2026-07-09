@@ -15,17 +15,20 @@ from risk_models.us_fundamental.shared.infra.io_manager import S3RiskModelIOMana
 from .assets.institutional_holdings_normalized import institutional_holdings_normalized
 from .assets.institutional_ownership_factor import institutional_ownership_factor
 from .assets.institutional_ownership_raw import institutional_ownership_raw
-from .config import FLOAT_DATA_PATH
-from .infra.float_data import MassiveFloatDataProvider, StaticFloatDataProvider
+from .config import DENOMINATOR_DATA_PATH
+from .infra.denominator_data import (
+    MassiveMarketCapDataProvider,
+    StaticDenominatorDataProvider,
+)
 from .infra.massive_13f import Massive13FProvider
 
 
 resources = {
     "io_manager": S3RiskModelIOManager(lineage="live"),
     "io_provider": Massive13FProvider(api_key=os.getenv("MASSIVE_API_KEY")),
-    "float_provider": MassiveFloatDataProvider(
+    "denominator_provider": MassiveMarketCapDataProvider(
         api_key=os.getenv("MASSIVE_API_KEY"),
-        fallback=StaticFloatDataProvider(path=FLOAT_DATA_PATH),
+        fallback=StaticDenominatorDataProvider(path=DENOMINATOR_DATA_PATH),
     ),
 }
 

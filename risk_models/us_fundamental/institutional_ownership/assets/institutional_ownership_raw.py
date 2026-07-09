@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import dagster as dg
 import pandas as pd
 
-from ..config import FILING_LOOKBACK_DAYS, MASSIVE_13F_LIMIT
+from ..config import FILING_LOOKBACK_DAYS, MASSIVE_13F_LIMIT, PERIOD_LOOKBACK_DAYS
 from ..infra.base import InstitutionalHoldingsProvider
 
 
@@ -48,6 +48,9 @@ def institutional_ownership_raw(
             description=f"institutional_ownership_raw missing columns: {sorted(missing)}",
             metadata={"missing_columns": sorted(missing)},
         )
+
+    period_cutoff = pd.Timestamp(datetime.today() - timedelta(days=PERIOD_LOOKBACK_DAYS))
+    df = df[pd.to_datetime(df["period"], errors="coerce") >= period_cutoff].copy()
 
     context.log.info(
         f"Fetched {len(df)} 13F rows, "
