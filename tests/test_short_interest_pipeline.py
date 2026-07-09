@@ -4,7 +4,6 @@ Run with: pytest tests/
 """
 
 import pandas as pd
-import pytest
 from unittest.mock import MagicMock
 from dagster import build_asset_context
 
