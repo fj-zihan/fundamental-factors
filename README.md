@@ -45,7 +45,7 @@ settlement dates - Incremental updates for the latest settlement date
 All assets have been verified end-to-end locally using Massive API and
 LocalStack (S3 emulation).
 
-<img src="https://github.com/user-attachments/assets/8beaa457-7a77-4185-a214-6925a2811ded" alt="截屏2026-07-01 19 02 08" width="987" height="291"/>
+<img src="https://github.com/user-attachments/assets/8beaa457-7a77-4185-a214-6925a2811ded" alt="截屏2026-07-01 19 02 08" width="714" height="297"/>
 
 ------------------------------------------------------------------------
 
@@ -116,7 +116,7 @@ Three-tier validation system in `validation.py` (pure metric
 functions) + `checks.py` (Dagster wiring):
 
 | Tier   | Mechanism                                                                                                                   | Where                                                                                   | Trigger                                                                                                                                                                           |
-|---------------|------------------|-----------------|------------------------|
+|-----------------|-----------------|-----------------|----------------------|
 | Tier 1 | Inline `raise dg.Failure(...)`, before the asset returns (not a `@dg.asset_check` — those only run *after* materialization) | `short_interest_raw` (defensive copy also in the two factor assets)                     | Universe coverage \< 50% of `sp500_universe`; \> 50% NaN in required columns                                                                                                      |
 | Tier 2 | `@dg.asset_check(..., blocking=True)`, severity ERROR                                                                       | `short_interest_raw`, `short_interest_factor_full`, `short_interest_factor_incremental` | Schema violations; duplicate `(ticker, settlement_date)`; NaN \> 5%; `si_factor` mean/std deviation above the T2 band                                                             |
 | Tier 3 | `@dg.asset_check(..., blocking=False)`, severity WARN                                                                       | same three assets                                                                       | NaN \> 1%; `si_factor` mean/std deviation above the T3 band; `inf` values; exposure instability (`\|Δ si_factor\|` between the two most recent settlement dates, diagnostic only) |
