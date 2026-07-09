@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 from datetime import timedelta
 
 import pandas as pd
@@ -12,7 +13,9 @@ from ..config import (
     FLOAT_DATA_PATH,
     MASSIVE_AGGS_PATH_TEMPLATE,
     MASSIVE_FLOAT_PATH,
+    MASSIVE_MAX_RETRIES,
     PRICE_LOOKBACK_DAYS,
+    MASSIVE_RETRY_SLEEP_SECONDS,
 )
 from .base import FloatDataProvider
 
@@ -208,14 +211,30 @@ class MassiveFloatDataProvider(FloatDataProvider):
         url: str,
         params: dict[str, object] | None = None,
     ) -> dict[str, object]:
-        response = self.session.get(
-            url,
-            headers=self._headers,
-            params=params,
-            timeout=30,
-        )
-        response.raise_for_status()
-        return response.json()
+        last_response: requests.Response | None = None
+        for attempt in range(MASSIVE_MAX_RETRIES + 1):
+            response = self.session.get(
+                url,
+                headers=self._headers,
+                params=params,
+                timeout=30,
+            )
+            last_response = response
+            if getattr(response, "status_code", 200) != 429:
+                response.raise_for_status()
+                return response.json()
+
+            retry_after = response.headers.get("Retry-After")
+            if retry_after:
+                sleep_seconds = float(retry_after)
+            else:
+                sleep_seconds = MASSIVE_RETRY_SLEEP_SECONDS * (attempt + 1)
+            time.sleep(sleep_seconds)
+
+        if last_response is None:
+            raise RuntimeError("Massive float request failed before a response was created.")
+        last_response.raise_for_status()
+        return last_response.json()
 
     @staticmethod
     def _first_record(payload: dict[str, object]) -> dict[str, object] | None:
