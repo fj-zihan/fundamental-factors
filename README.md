@@ -1,9 +1,3 @@
----
-editor_options: 
-  markdown: 
-    wrap: 72
----
-
 # Fundamental Factors
 
 This repository contains Dagster-based implementations and
@@ -46,6 +40,7 @@ All assets have been verified end-to-end locally using Massive API and
 LocalStack (S3 emulation).
 
 <img src="https://github.com/user-attachments/assets/8beaa457-7a77-4185-a214-6925a2811ded" alt="截屏2026-07-01 19 02 08" width="714" height="297"/>
+<img width="1377" height="404" alt="image" src="https://github.com/user-attachments/assets/78e24119-1294-4290-9ed1-4a2fcd7aa5e2" />
 
 ------------------------------------------------------------------------
 
