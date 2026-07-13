@@ -8,7 +8,8 @@ Design one or more quarterly institutional ownership and crowding factors from F
 universe
   -> institutional_ownership_raw
   -> institutional_holdings_normalized
-  -> institutional_ownership_factor
+  -> institutional_ownership_factor_full        # backfill lineage
+  -> institutional_ownership_factor_incremental # live lineage
 ```
 
 The first production target should be a robust stock-level cross-sectional signal, not a manager-picking product. The preferred output is one row per `(ticker, period)` with standardized factor exposures.

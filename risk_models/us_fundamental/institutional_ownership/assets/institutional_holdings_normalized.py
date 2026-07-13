@@ -44,6 +44,7 @@ def _attach_ticker(df: pd.DataFrame, sp500_universe: pd.DataFrame) -> pd.DataFra
 
 @dg.asset(
     group_name="institutional_ownership",
+    io_manager_key="io_manager",
     description="Cleaned common-equity-like 13F holdings mapped to the universe.",
 )
 def institutional_holdings_normalized(

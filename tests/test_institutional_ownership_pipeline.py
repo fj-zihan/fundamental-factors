@@ -5,7 +5,8 @@ from risk_models.us_fundamental.institutional_ownership.assets.institutional_hol
     institutional_holdings_normalized,
 )
 from risk_models.us_fundamental.institutional_ownership.assets.institutional_ownership_factor import (
-    institutional_ownership_factor,
+    institutional_ownership_factor_full,
+    institutional_ownership_factor_incremental,
 )
 from risk_models.us_fundamental.institutional_ownership.infra.denominator_data import (
     MassiveMarketCapDataProvider,
@@ -15,13 +16,21 @@ from risk_models.us_fundamental.institutional_ownership.infra.denominator_data i
 class _DenominatorProvider:
     def fetch_denominator_data(self, tickers, periods):
         return pd.DataFrame(
-            {
-                "ticker": ["AMZN", "MSFT", "NVDA"],
-                "period": pd.to_datetime(["2024-09-30", "2024-09-30", "2024-09-30"]),
-                "denominator_value": [1000.0, 500.0, 250.0],
-                "denominator_type": ["market_cap", "market_cap", "market_cap"],
-                "market_cap": [1000.0, 500.0, 250.0],
-            }
+            [
+                {
+                    "ticker": ticker,
+                    "period": pd.Timestamp(period),
+                    "denominator_value": value,
+                    "denominator_type": "market_cap",
+                    "market_cap": value,
+                }
+                for ticker, value in {
+                    "AMZN": 1000.0,
+                    "MSFT": 500.0,
+                    "NVDA": 250.0,
+                }.items()
+                for period in ["2024-06-30", "2024-09-30"]
+            ]
         )
 
 
@@ -104,6 +113,19 @@ def _raw_13f():
                 "form_type": "13F-HR",
                 "accession_number": "d",
             },
+            {
+                "filer_cik": "1",
+                "filing_date": "2024-08-14",
+                "period": "2024-06-30",
+                "cusip": "023135106",
+                "issuer_name": "AMAZON COM INC",
+                "market_value": 50.0,
+                "shares_or_principal_amount": 5,
+                "shares_or_principal_type": "SH",
+                "put_call": None,
+                "form_type": "13F-HR",
+                "accession_number": "e",
+            },
         ]
     )
 
@@ -145,14 +167,15 @@ def test_factor_uses_market_cap_denominator():
         _raw_13f(),
         _universe(),
     )
-    result = institutional_ownership_factor(
+    result = institutional_ownership_factor_full(
         build_asset_context(),
         normalized,
         _DenominatorProvider(),
     )
 
-    amzn = result[result["ticker"] == "AMZN"].iloc[0]
-    msft = result[result["ticker"] == "MSFT"].iloc[0]
+    latest = result[result["period"] == pd.Timestamp("2024-09-30")]
+    amzn = latest[latest["ticker"] == "AMZN"].iloc[0]
+    msft = latest[latest["ticker"] == "MSFT"].iloc[0]
 
     assert amzn["total_13f_market_value"] == 300.0
     assert amzn["denominator_type"] == "market_cap"
@@ -161,6 +184,23 @@ def test_factor_uses_market_cap_denominator():
     assert msft["total_13f_market_value"] == 150.0
     assert msft["denominator_value"] == 500.0
     assert {"io_level", "io_breadth"}.issubset(result.columns)
+    assert set(result["period"]) == set(pd.to_datetime(["2024-06-30", "2024-09-30"]))
+
+
+def test_incremental_factor_uses_latest_period_only():
+    normalized = institutional_holdings_normalized(
+        build_asset_context(),
+        _raw_13f(),
+        _universe(),
+    )
+    result = institutional_ownership_factor_incremental(
+        build_asset_context(),
+        normalized,
+        _DenominatorProvider(),
+    )
+
+    assert set(result["period"]) == {pd.Timestamp("2024-09-30")}
+    assert set(result["ticker"]) == {"AMZN", "MSFT"}
 
 
 def test_massive_market_cap_provider_builds_denominator():

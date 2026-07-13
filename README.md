@@ -26,11 +26,13 @@ institutional_ownership_raw        ← Massive API (13F filings)
       ↓
 institutional_holdings_normalized
       ↓
-institutional_ownership_factor     ← market cap denominator provider
+institutional_ownership_factor_full        → S3 lineage=backfill
+institutional_ownership_factor_incremental → S3 lineage=live
+                                      ← market cap denominator provider
 ```
 
 The pipeline supports: - Full backfill computation across all historical
-settlement dates - Incremental updates for the latest settlement date
+dates/periods - Incremental updates for the latest date/period
 
 ------------------------------------------------------------------------
 
@@ -61,7 +63,7 @@ risk_models/
       config.py      # configuration parameters, incl. all Tier 1/2/3 thresholds
       definitions.py # Dagster definitions
     institutional_ownership/
-      assets/        # Dagster assets for raw 13F, normalized holdings, and MVP factors
+      assets/        # Dagster assets for raw 13F, normalized holdings, and IO factors
       infra/         # Massive 13F and denominator data providers
       config.py      # institutional ownership configuration
       definitions.py # Dagster definitions
@@ -247,11 +249,18 @@ dagster job execute -m risk_models.us_fundamental.short_interest \
   -j short_interest_full_backfill_job
 ```
 
-### Run institutional ownership MVP job
+### Run institutional ownership incremental job
 
 ``` bash
 dagster job execute -m risk_models.us_fundamental.institutional_ownership.definitions \
-  -j institutional_ownership_mvp_job
+  -j institutional_ownership_incremental_job
+```
+
+### Run institutional ownership full backfill job
+
+``` bash
+dagster job execute -m risk_models.us_fundamental.institutional_ownership.definitions \
+  -j institutional_ownership_full_backfill_job
 ```
 
 ### Run tests

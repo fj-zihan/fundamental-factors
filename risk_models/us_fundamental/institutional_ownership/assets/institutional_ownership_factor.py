@@ -1,4 +1,4 @@
-"""Institutional ownership MVP factor asset."""
+"""Institutional ownership MVP factor assets."""
 
 import numpy as np
 import dagster as dg
@@ -40,12 +40,7 @@ def _zscore_by_period(df: pd.DataFrame, raw_col: str, out_col: str) -> pd.Series
     return df.groupby("period")[raw_col].transform(_transform)
 
 
-@dg.asset(
-    group_name="institutional_ownership",
-    io_manager_key="io_manager",
-    description="MVP institutional ownership factors: market-cap-scaled level and breadth.",
-)
-def institutional_ownership_factor(
+def _compute_io_factor_panel(
     context: dg.AssetExecutionContext,
     institutional_holdings_normalized: pd.DataFrame,
     denominator_provider: dg.ResourceParam[DenominatorDataProvider],
@@ -120,3 +115,58 @@ def institutional_ownership_factor(
         f"{result['ticker'].nunique()} tickers, {result['period'].nunique()} periods"
     )
     return result[OUTPUT_COLUMNS].reset_index(drop=True)
+
+
+@dg.asset(
+    group_name="institutional_ownership",
+    io_manager_key="backfill_io_manager",
+    description=(
+        "Full backfill: institutional ownership factors for all available "
+        "13F periods. Written to S3 lineage=backfill."
+    ),
+)
+def institutional_ownership_factor_full(
+    context: dg.AssetExecutionContext,
+    institutional_holdings_normalized: pd.DataFrame,
+    denominator_provider: dg.ResourceParam[DenominatorDataProvider],
+) -> pd.DataFrame:
+    result = _compute_io_factor_panel(
+        context,
+        institutional_holdings_normalized,
+        denominator_provider,
+    )
+    if not result.empty:
+        context.log.info(
+            f"Full IO backfill: {len(result)} rows, "
+            f"{result['period'].nunique()} periods, "
+            f"{result['ticker'].nunique()} tickers"
+        )
+    return result
+
+
+@dg.asset(
+    group_name="institutional_ownership",
+    io_manager_key="io_manager",
+    description=(
+        "Incremental live update: institutional ownership factors for the "
+        "latest available 13F period only. Written to S3 lineage=live."
+    ),
+)
+def institutional_ownership_factor_incremental(
+    context: dg.AssetExecutionContext,
+    institutional_holdings_normalized: pd.DataFrame,
+    denominator_provider: dg.ResourceParam[DenominatorDataProvider],
+) -> pd.DataFrame:
+    if institutional_holdings_normalized.empty:
+        return pd.DataFrame(columns=OUTPUT_COLUMNS)
+
+    latest_period = institutional_holdings_normalized["period"].max()
+    latest_holdings = institutional_holdings_normalized[
+        institutional_holdings_normalized["period"] == latest_period
+    ].copy()
+    result = _compute_io_factor_panel(context, latest_holdings, denominator_provider)
+    context.log.info(
+        f"Incremental IO [{latest_period.date()}]: {len(result)} rows, "
+        f"{result['ticker'].nunique() if not result.empty else 0} tickers"
+    )
+    return result

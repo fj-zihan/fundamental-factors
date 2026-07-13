@@ -25,6 +25,7 @@ REQUIRED_RAW_COLUMNS = {
 
 @dg.asset(
     group_name="institutional_ownership",
+    io_manager_key="io_manager",
     description="Raw SEC Form 13F holding-level data from Massive.",
 )
 def institutional_ownership_raw(
