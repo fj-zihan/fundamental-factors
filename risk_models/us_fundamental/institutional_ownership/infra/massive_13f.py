@@ -10,11 +10,12 @@ import requests
 from ..config import (
     MASSIVE_13F_MAX_PAGES,
     MASSIVE_13F_PATH,
-    MASSIVE_MAX_RETRIES,
+    MASSIVE_LOG_EVERY_N_PAGES,
     MASSIVE_PAGE_SLEEP_SECONDS,
-    MASSIVE_RETRY_SLEEP_SECONDS,
+    MASSIVE_REQUEST_TIMEOUT_SECONDS,
 )
 from .base import InstitutionalHoldingsProvider
+from .request_utils import massive_rate_limited, retry_with_linear_backoff
 
 
 RAW_13F_COLUMNS = [
@@ -88,6 +89,15 @@ class Massive13FProvider(InstitutionalHoldingsProvider):
 
             url = payload.get("next_url")
             params = {}
+            if (
+                MASSIVE_LOG_EVERY_N_PAGES > 0
+                and page_count % MASSIVE_LOG_EVERY_N_PAGES == 0
+            ):
+                rows_so_far = sum(len(frame) for frame in frames)
+                print(
+                    f"Massive 13F fetch progress: {page_count} pages, "
+                    f"{rows_so_far} rows"
+                )
             if self.max_pages and page_count >= self.max_pages:
                 break
             if url and MASSIVE_PAGE_SLEEP_SECONDS > 0:
@@ -110,27 +120,18 @@ class Massive13FProvider(InstitutionalHoldingsProvider):
         url: str,
         params: dict[str, object] | None = None,
     ) -> requests.Response:
-        last_response: requests.Response | None = None
-        for attempt in range(MASSIVE_MAX_RETRIES + 1):
-            response = requests.get(
-                url,
-                headers=self._headers,
-                params=params,
-                timeout=30,
-            )
-            last_response = response
-            if response.status_code != 429:
-                response.raise_for_status()
-                return response
+        return self._request(url, params=params)
 
-            retry_after = response.headers.get("Retry-After")
-            if retry_after:
-                sleep_seconds = float(retry_after)
-            else:
-                sleep_seconds = MASSIVE_RETRY_SLEEP_SECONDS * (attempt + 1)
-            time.sleep(sleep_seconds)
-
-        if last_response is None:
-            raise RuntimeError("Massive 13F request failed before a response was created.")
-        last_response.raise_for_status()
-        return last_response
+    @retry_with_linear_backoff
+    @massive_rate_limited
+    def _request(
+        self,
+        url: str,
+        params: dict[str, object] | None = None,
+    ) -> requests.Response:
+        return requests.get(
+            url,
+            headers=self._headers,
+            params=params,
+            timeout=MASSIVE_REQUEST_TIMEOUT_SECONDS,
+        )

@@ -3,19 +3,17 @@
 from __future__ import annotations
 
 import os
-import time
 
 import pandas as pd
 import requests
 
 from ..config import (
     DENOMINATOR_DATA_PATH,
-    MASSIVE_MAX_RETRIES,
-    MASSIVE_REQUEST_SLEEP_SECONDS,
-    MASSIVE_RETRY_SLEEP_SECONDS,
+    MASSIVE_REQUEST_TIMEOUT_SECONDS,
     MASSIVE_TICKER_DETAILS_PATH_TEMPLATE,
 )
 from .base import DenominatorDataProvider
+from .request_utils import massive_rate_limited, retry_with_linear_backoff
 
 
 OUTPUT_COLUMNS = [
@@ -135,7 +133,6 @@ class MassiveMarketCapDataProvider(DenominatorDataProvider):
         for ticker in clean_tickers:
             for period in clean_periods:
                 record = self._fetch_market_cap(ticker, pd.Timestamp(period))
-                self._sleep_between_requests()
                 if not record:
                     continue
 
@@ -168,10 +165,16 @@ class MassiveMarketCapDataProvider(DenominatorDataProvider):
         period: pd.Timestamp,
     ) -> dict[str, object] | None:
         path = MASSIVE_TICKER_DETAILS_PATH_TEMPLATE.format(ticker=ticker)
-        payload = self._get_json(
-            f"{self.BASE_URL}{path}",
-            params={"date": period.strftime("%Y-%m-%d")},
-        )
+        try:
+            payload = self._get_json(
+                f"{self.BASE_URL}{path}",
+                params={"date": period.strftime("%Y-%m-%d")},
+            )
+        except requests.HTTPError as exc:
+            status_code = exc.response.status_code if exc.response is not None else None
+            if status_code in {400, 404}:
+                return None
+            raise
         record = self._first_record(payload)
         if record is None:
             return None
@@ -192,30 +195,21 @@ class MassiveMarketCapDataProvider(DenominatorDataProvider):
         url: str,
         params: dict[str, object] | None = None,
     ) -> dict[str, object]:
-        last_response: requests.Response | None = None
-        for attempt in range(MASSIVE_MAX_RETRIES + 1):
-            response = self.session.get(
-                url,
-                headers=self._headers,
-                params=params,
-                timeout=30,
-            )
-            last_response = response
-            if getattr(response, "status_code", 200) != 429:
-                response.raise_for_status()
-                return response.json()
+        return self._request(url, params=params).json()
 
-            retry_after = response.headers.get("Retry-After")
-            if retry_after:
-                sleep_seconds = float(retry_after)
-            else:
-                sleep_seconds = MASSIVE_RETRY_SLEEP_SECONDS * (attempt + 1)
-            time.sleep(sleep_seconds)
-
-        if last_response is None:
-            raise RuntimeError("Massive market-cap request failed before a response.")
-        last_response.raise_for_status()
-        return last_response.json()
+    @retry_with_linear_backoff
+    @massive_rate_limited
+    def _request(
+        self,
+        url: str,
+        params: dict[str, object] | None = None,
+    ) -> requests.Response:
+        return self.session.get(
+            url,
+            headers=self._headers,
+            params=params,
+            timeout=MASSIVE_REQUEST_TIMEOUT_SECONDS,
+        )
 
     @staticmethod
     def _first_record(payload: dict[str, object]) -> dict[str, object] | None:
@@ -227,11 +221,6 @@ class MassiveMarketCapDataProvider(DenominatorDataProvider):
         if payload.get("market_cap") or payload.get("ticker"):
             return payload
         return None
-
-    @staticmethod
-    def _sleep_between_requests() -> None:
-        if MASSIVE_REQUEST_SLEEP_SECONDS > 0:
-            time.sleep(MASSIVE_REQUEST_SLEEP_SECONDS)
 
     def _fetch_fallback_for_missing(
         self,

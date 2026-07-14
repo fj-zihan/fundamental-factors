@@ -21,9 +21,13 @@ MASSIVE_13F_MAX_PAGES = (
 # historical float source is available.
 MASSIVE_TICKER_DETAILS_PATH_TEMPLATE = "/v3/reference/tickers/{ticker}"
 MASSIVE_MAX_RETRIES = int(os.getenv("MASSIVE_MAX_RETRIES", "5"))
-MASSIVE_RETRY_SLEEP_SECONDS = float(os.getenv("MASSIVE_RETRY_SLEEP_SECONDS", "2"))
+MASSIVE_RETRY_SLEEP_SECONDS = float(os.getenv("MASSIVE_RETRY_SLEEP_SECONDS", "10"))
 MASSIVE_PAGE_SLEEP_SECONDS = float(os.getenv("MASSIVE_PAGE_SLEEP_SECONDS", "0.25"))
-MASSIVE_REQUEST_SLEEP_SECONDS = float(os.getenv("MASSIVE_REQUEST_SLEEP_SECONDS", "0.25"))
+MASSIVE_REQUEST_TIMEOUT_SECONDS = float(
+    os.getenv("MASSIVE_REQUEST_TIMEOUT_SECONDS", "30")
+)
+MASSIVE_REQUESTS_PER_MINUTE = float(os.getenv("MASSIVE_REQUESTS_PER_MINUTE", "5"))
+MASSIVE_LOG_EVERY_N_PAGES = int(os.getenv("MASSIVE_LOG_EVERY_N_PAGES", "10"))
 
 # Static denominator fallback. This file is intentionally not required at import
 # time; the provider raises a clear error if a run needs it and it is missing.
